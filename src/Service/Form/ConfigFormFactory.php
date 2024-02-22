@@ -19,6 +19,9 @@ class ConfigFormFactory implements FactoryInterface
             $format = $metadataFormatManager->get($name);
             $formats[] = $format::METADATA_PREFIX;
         }
+        if ($options == null) {
+            $options = [];
+        }
 
         $form = new ConfigForm(null, $options);
         return $form
