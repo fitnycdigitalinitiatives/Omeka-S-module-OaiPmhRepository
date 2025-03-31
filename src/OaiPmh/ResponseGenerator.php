@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 /**
  * @author John Flatness, Yu-Hsun Lin
  * @copyright Copyright 2009 John Flatness, Yu-Hsun Lin
@@ -6,6 +8,7 @@
  * @copyright Daniel Berthereau, 2014-2018
  * @license http://www.gnu.org/licenses/gpl-3.0.txt
  */
+
 namespace OaiPmhRepository\OaiPmh;
 
 use ArrayObject;
@@ -227,15 +230,22 @@ class ResponseGenerator extends AbstractXmlGenerator
             $this->document->appendChild($xslt);
         }
 
-        $root = $this->document->createElementNS(self::OAI_PMH_NAMESPACE_URI,
-            'OAI-PMH');
+        $root = $this->document->createElementNS(
+            self::OAI_PMH_NAMESPACE_URI,
+            'OAI-PMH'
+        );
         $this->document->appendChild($root);
 
-        $root->setAttributeNS(self::XML_SCHEMA_NAMESPACE_URI, 'xsi:schemaLocation',
-            self::OAI_PMH_NAMESPACE_URI . ' ' . self::OAI_PMH_SCHEMA_URI);
+        $root->setAttributeNS(
+            self::XML_SCHEMA_NAMESPACE_URI,
+            'xsi:schemaLocation',
+            self::OAI_PMH_NAMESPACE_URI . ' ' . self::OAI_PMH_SCHEMA_URI
+        );
 
-        $responseDate = $this->document->createElement('responseDate',
-            \OaiPmhRepository\OaiPmh\Plugin\Date::unixToUtc(time()));
+        $responseDate = $this->document->createElement(
+            'responseDate',
+            \OaiPmhRepository\OaiPmh\Plugin\Date::unixToUtc(time())
+        );
         $root->appendChild($responseDate);
 
         $this->dispatchRequest();
@@ -302,8 +312,7 @@ class ResponseGenerator extends AbstractXmlGenerator
                 $this->resumeListResponse($resumptionToken);
             }
             /* ListRecords and ListIdentifiers use a common code base and share
-               all possible arguments, and are handled by one function. */
-            elseif ($verb == 'ListRecords' || $verb == 'ListIdentifiers') {
+               all possible arguments, and are handled by one function. */ elseif ($verb == 'ListRecords' || $verb == 'ListIdentifiers') {
                 $this->initListResponse();
             } else {
                 $functionName = lcfirst($verb);
@@ -320,7 +329,9 @@ class ResponseGenerator extends AbstractXmlGenerator
         $method = $this->request->getMethod();
         if (!in_array($method, ['GET', 'POST'])) {
             $this->throwError(self::OAI_ERR_BAD_ARGUMENT, new Message(
-                'The OAI-PMH protocol version 2.0 supports only "GET" and "POST" requests, not "%s".', $method)); // @translate
+                'The OAI-PMH protocol version 2.0 supports only "GET" and "POST" requests, not "%s".',
+                $method
+            )); // @translate
         }
     }
 
@@ -382,7 +393,8 @@ class ResponseGenerator extends AbstractXmlGenerator
 
         $metadataFormatManager = $this->serviceLocator->get(\OaiPmhRepository\OaiPmh\MetadataFormatManager::class);
         $metadataFormats = $this->serviceLocator->get('Omeka\Settings')->get('oaipmhrepository_metadata_formats');
-        if ($metadataPrefix
+        if (
+            $metadataPrefix
             && (
                 !$metadataFormatManager->has($metadataPrefix)
                 || !in_array($metadataPrefix, $metadataFormats)
@@ -417,7 +429,10 @@ class ResponseGenerator extends AbstractXmlGenerator
             'granularity' => self::OAI_GRANULARITY_STRING,
         ];
         $identify = $this->createElementWithChildren(
-            $this->document->documentElement, 'Identify', $elements);
+            $this->document->documentElement,
+            'Identify',
+            $elements
+        );
 
         // Publish support for compression, if appropriate
         // This defers to compression set in Omeka's paths.php
@@ -453,6 +468,41 @@ class ResponseGenerator extends AbstractXmlGenerator
         $toolkit->setAttribute('xmlns', $toolkitNamespace);
     }
 
+    private function getDesignerRecord($identifier)
+    {
+        $itemSetId = OaiIdentifier::oaiIdToItem($identifier);
+
+        if (!$itemSetId) {
+            $this->throwError(self::OAI_ERR_ID_DOES_NOT_EXIST);
+            return;
+        }
+
+        $api = $this->serviceLocator->get('ViewHelperManager')->get('api');
+
+        $data = [];
+        $data['id'] = $itemSetId;
+        $data['limit'] = 1;
+        if ($this->site) {
+            $data['site_id'] = $this->site->id();
+        }
+        $itemSet = $api->searchOne('item_sets', $data)->getContent();
+
+        if (!$itemSet) {
+            $itemSet = null;
+            $this->throwError(self::OAI_ERR_ID_DOES_NOT_EXIST);
+        }
+
+        if (!$this->error) {
+            $url = $this->serviceLocator->get('ViewHelperManager')->get('url');
+            $getRecord = $this->document->createElement('GetRecord');
+            $this->document->documentElement->appendChild($getRecord);
+            // $metadataFormatManager = $this->serviceLocator->get(\OaiPmhRepository\OaiPmh\MetadataFormatManager::class);
+            // $metadataFormat = $metadataFormatManager->get($metadataPrefix);
+            // $metadataFormat->setOaiSet($this->oaiSet);
+            $this->appendDesignerRecord($getRecord, $itemSet, $url);
+        }
+    }
+
     /**
      * Responds to the GetRecord verb.
      *
@@ -463,6 +513,11 @@ class ResponseGenerator extends AbstractXmlGenerator
     {
         $identifier = $this->_getParam('identifier');
         $metadataPrefix = $this->_getParam('metadataPrefix');
+
+        if ($this->site->slug() == 'designerfiles') {
+            $this->getDesignerRecord($identifier);
+            return;
+        }
 
         $itemId = OaiIdentifier::oaiIdToItem($identifier);
 
@@ -551,6 +606,80 @@ class ResponseGenerator extends AbstractXmlGenerator
         }
     }
 
+    private function appendDesignerRecord($parent, $itemSet, $url)
+    {
+        $document = $parent->ownerDocument;
+        $record = $document->createElement('record');
+        $parent->appendChild($record);
+        $this->appendDesignerHeader($record, $itemSet);
+
+        $metadata = $document->createElement('metadata');
+        $record->appendChild($metadata);
+
+        $document = $metadata->ownerDocument;
+
+        $oai = $document->createElementNS('http://www.openarchives.org/OAI/2.0/oai_dcterms/', 'oai_dcterms:dcterms');
+        $metadata->appendChild($oai);
+
+        /* Must manually specify XML schema uri per spec, but DOM won't include
+         * a redundant xmlns:xsi attribute, so we just set the attribute
+         */
+        $oai->setAttribute('xmlns:dc', 'http://purl.org/dc/elements/1.1/');
+        $oai->setAttribute('xmlns:dcterms', 'http://purl.org/dc/terms/');
+        $oai->setAttribute('xmlns:xsi', parent::XML_SCHEMA_NAMESPACE_URI);
+        $oai->setAttribute('xsi:schemaLocation', 'http://www.openarchives.org/OAI/2.0/oai_dcterms/' . ' ' . 'http://www.openarchives.org/OAI/2.0/oai_dcterms.xsd');
+
+        $designerName = $itemSet->displayTitle();
+        $this->appendNewElement($oai, 'dc:title', 'Designer file: ' . $designerName, []);
+        $this->appendNewElement($oai, 'dc:description', 'The FIT Designer Files include selected magazine and newspaper clippings, runway shots, fashion illustrations and promotional materials.', []);
+        $this->appendNewElement($oai, 'dc:type', 'Still Image', []);
+        foreach ($itemSet->value('foaf:name', ['all' => true]) as $name) {
+            $this->appendNewElement($oai, 'dc:contributor', $name, []);
+            $this->appendNewElement($oai, 'dc:subject', $name, []);
+        }
+        $this->appendNewElement($oai, 'dcterms:isPartOf', 'FIT Designer Files', []);
+        $this->appendNewElement($oai, 'dc:identifier', $url('site/search', ['site-slug' => $this->site->slug()], ['query' => ['limit' => ['item_set_dcterms_title' => [$designerName]]]]), []);
+    }
+
+    private function appendDesignerHeader($parent, $itemSet)
+    {
+        $headerData = [];
+        $headerData['identifier'] = OaiIdentifier::itemToOaiId($itemSet->id());
+
+        $datestamp = $itemSet->modified() ?: $itemSet->created();
+
+        $dateFormat = \OaiPmhRepository\OaiPmh\Plugin\Date::OAI_DATE_FORMAT;
+        $headerData['datestamp'] = $datestamp->format($dateFormat);
+
+        $header = $this->createElementWithChildren($parent, 'header', $headerData);
+    }
+
+    private function listDesignerSets($verb, $metadataPrefix): void
+    {
+        $url = $this->serviceLocator->get('ViewHelperManager')->get('url');
+
+        $siteItemSets = $this->site->siteItemSets();
+        if (empty($siteItemSets)) {
+            $this->throwError(self::OAI_ERR_NO_SET_HIERARCHY);
+            return;
+        }
+        /** @var \OaiPmhRepository\OaiPmh\Metadata\MetadataInterface $metadataFormat */
+        $metadataFormatManager = $this->serviceLocator->get(\OaiPmhRepository\OaiPmh\MetadataFormatManager::class);
+        $metadataFormat = $metadataFormatManager->get($metadataPrefix);
+        $metadataFormat->setOaiSet($this->oaiSet);
+        $verbElement = $this->document->createElement($verb);
+        $this->document->documentElement->appendChild($verbElement);
+        foreach ($siteItemSets as $siteItemSet) {
+            // $metadataFormat->$method($verbElement, $siteItemSet->itemSet());
+            $itemSet = $siteItemSet->itemSet();
+            if ($verb == 'ListIdentifiers') {
+                $this->appendDesignerHeader($verbElement, $itemSet);
+            } elseif ($verb == 'ListRecords') {
+                $this->appendDesignerRecord($verbElement, $itemSet, $url);
+            }
+        }
+    }
+
     /**
      * Responds to the ListIdentifiers and ListRecords verbs.
      *
@@ -571,12 +700,14 @@ class ResponseGenerator extends AbstractXmlGenerator
             $untilDate = new DateTime($until);
         }
 
-        $this->listResponse($this->query['verb'],
-                            $this->query['metadataPrefix'],
-                            0,
-                            $this->_getParam('set'),
-                            $fromDate,
-                            $untilDate);
+        $this->listResponse(
+            $this->query['verb'],
+            $this->query['metadataPrefix'],
+            0,
+            $this->_getParam('set'),
+            $fromDate,
+            $untilDate
+        );
     }
 
     /**
@@ -629,127 +760,139 @@ class ResponseGenerator extends AbstractXmlGenerator
      */
     private function listResponse($verb, $metadataPrefix, $cursor, $set, $from, $until): void
     {
-        /**
-         * @var \Omeka\Api\Adapter\Manager $apiAdapterManager
-         * @var \Doctrine\ORM\EntityManager $entityManager
-         */
-        $apiAdapterManager = $this->serviceLocator->get('Omeka\ApiAdapterManager');
-        $entityManager = $this->serviceLocator->get('Omeka\EntityManager');
-
-        $itemRepository = $entityManager->getRepository(\Omeka\Entity\Item::class);
-        $qb = $itemRepository->createQueryBuilder('omeka_root');
-        $qb->select('omeka_root');
-
-        $query = new ArrayObject;
-        $expr = $qb->expr();
-
-        // Public/private is automatically managed for anonymous requests.
-
-        if ($set) {
-            $resourceSet = $this->oaiSet->findResource($set);
-            if (empty($resourceSet)) {
-                $this->throwError(self::OAI_ERR_NO_RECORDS_MATCH,
-                    new Message('The set "%s" doesn’t exist.', $set)); // @translate
-                return;
-            }
-            switch ($this->setSpecType) {
-                case 'site_pool':
-                    $query['site_id'] = $resourceSet->id();
-                    break;
-                case 'item_set':
-                case 'list_item_sets':
-                    $query['item_set_id'] = $resourceSet->id();
-                    break;
-                case 'queries':
-                    $query = new ArrayObject($resourceSet['aQuery']);
-                    break;
-                case 'none':
-                default:
-                    $this->throwError(self::OAI_ERR_NO_SET_HIERARCHY);
-                    return;
-            }
-        }
-
-        if ($this->site) {
-            $query['site_id'] = $this->site->id();
-        }
-
-        /** @var \OaiPmhRepository\OaiPmh\Metadata\MetadataInterface $metadataFormat */
-        $metadataFormatManager = $this->serviceLocator->get(\OaiPmhRepository\OaiPmh\MetadataFormatManager::class);
-        $metadataFormat = $metadataFormatManager->get($metadataPrefix);
-        $metadataFormat->setOaiSet($this->oaiSet);
-
-        $metadataFormat->filterList($query);
-
-        /** @var \Omeka\Api\Adapter\ItemAdapter $itemAdapter */
-        $itemAdapter = $apiAdapterManager->get('items');
-        $itemAdapter->buildQuery($qb, $query->getArrayCopy());
-
-        if ($from) {
-            $qb->andWhere($expr->orX(
-                $expr->andX(
-                    $expr->isNotNull('omeka_root.modified'),
-                    $expr->gte('omeka_root.modified', ':from_1')
-                ),
-                $expr->andX(
-                    $expr->isNull('omeka_root.modified'),
-                    $expr->gte('omeka_root.created', ':from_2')
-                )
-            ));
-            $qb->setParameter('from_1', $from);
-            $qb->setParameter('from_2', $from);
-        }
-        if ($until) {
-            $qb->andWhere($expr->orX(
-                $expr->andX(
-                    $expr->isNotNull('omeka_root.modified'),
-                    $expr->lte('omeka_root.modified', ':until_1')
-                ),
-                $expr->andX(
-                    $expr->isNull('omeka_root.modified'),
-                    $expr->lte('omeka_root.created', ':until_2')
-                )
-            ));
-            $qb->setParameter('until_1', $until);
-            $qb->setParameter('until_2', $until);
-        }
-
-        $qb->groupBy('omeka_root.id');
-
-        // This limit call will form the basis of the flow control
-        $qb->setMaxResults($this->_listLimit);
-        $qb->setFirstResult($cursor);
-
-        $paginator = new Paginator($qb, false);
-        $rows = count($paginator);
-
-        if ($rows == 0) {
-            $this->throwError(self::OAI_ERR_NO_RECORDS_MATCH, new Message('No records match the given criteria.')); // @translate
+        if ($this->site->slug() == 'designerfiles') {
+            $this->listDesignerSets($verb, $metadataPrefix);
         } else {
-            if ($verb == 'ListIdentifiers') {
-                $method = 'appendHeader';
-            } elseif ($verb == 'ListRecords') {
-                $method = 'appendRecord';
+            /**
+             * @var \Omeka\Api\Adapter\Manager $apiAdapterManager
+             * @var \Doctrine\ORM\EntityManager $entityManager
+             */
+            $apiAdapterManager = $this->serviceLocator->get('Omeka\ApiAdapterManager');
+            $entityManager = $this->serviceLocator->get('Omeka\EntityManager');
+
+            $itemRepository = $entityManager->getRepository(\Omeka\Entity\Item::class);
+            $qb = $itemRepository->createQueryBuilder('omeka_root');
+            $qb->select('omeka_root');
+
+            $query = new ArrayObject;
+            $expr = $qb->expr();
+
+            // Public/private is automatically managed for anonymous requests.
+
+            if ($set) {
+                $resourceSet = $this->oaiSet->findResource($set);
+                if (empty($resourceSet)) {
+                    $this->throwError(
+                        self::OAI_ERR_NO_RECORDS_MATCH,
+                        new Message('The set "%s" doesn’t exist.', $set)
+                    ); // @translate
+                    return;
+                }
+                switch ($this->setSpecType) {
+                    case 'site_pool':
+                        $query['site_id'] = $resourceSet->id();
+                        break;
+                    case 'item_set':
+                    case 'list_item_sets':
+                        $query['item_set_id'] = $resourceSet->id();
+                        break;
+                    case 'queries':
+                        $query = new ArrayObject($resourceSet['aQuery']);
+                        break;
+                    case 'none':
+                    default:
+                        $this->throwError(self::OAI_ERR_NO_SET_HIERARCHY);
+                        return;
+                }
             }
 
-            $verbElement = $this->document->createElement($verb);
-            $this->document->documentElement->appendChild($verbElement);
-            foreach ($paginator as $itemEntity) {
-                $item = $itemAdapter->getRepresentation($itemEntity);
-                $metadataFormat->$method($verbElement, $item);
+            if ($this->site) {
+                $query['site_id'] = $this->site->id();
             }
-            if ($rows > ($cursor + $this->_listLimit)) {
-                $token = $this->createResumptionToken($verb, $metadataPrefix,
-                    $cursor + $this->_listLimit, $set, $from, $until);
 
-                $tokenElement = $this->document->createElement('resumptionToken', (string) $token->id());
-                $tokenElement->setAttribute('expirationDate', $token->expiration()->format('Y-m-d\TH:i:s\Z'));
-                $tokenElement->setAttribute('completeListSize', (string) $rows);
-                $tokenElement->setAttribute('cursor', (string) $cursor);
-                $verbElement->appendChild($tokenElement);
-            } elseif ($cursor != 0) {
-                $tokenElement = $this->document->createElement('resumptionToken');
-                $verbElement->appendChild($tokenElement);
+            /** @var \OaiPmhRepository\OaiPmh\Metadata\MetadataInterface $metadataFormat */
+            $metadataFormatManager = $this->serviceLocator->get(\OaiPmhRepository\OaiPmh\MetadataFormatManager::class);
+            $metadataFormat = $metadataFormatManager->get($metadataPrefix);
+            $metadataFormat->setOaiSet($this->oaiSet);
+
+            $metadataFormat->filterList($query);
+
+            /** @var \Omeka\Api\Adapter\ItemAdapter $itemAdapter */
+            $itemAdapter = $apiAdapterManager->get('items');
+            $itemAdapter->buildQuery($qb, $query->getArrayCopy());
+
+            if ($from) {
+                $qb->andWhere($expr->orX(
+                    $expr->andX(
+                        $expr->isNotNull('omeka_root.modified'),
+                        $expr->gte('omeka_root.modified', ':from_1')
+                    ),
+                    $expr->andX(
+                        $expr->isNull('omeka_root.modified'),
+                        $expr->gte('omeka_root.created', ':from_2')
+                    )
+                ));
+                $qb->setParameter('from_1', $from);
+                $qb->setParameter('from_2', $from);
+            }
+            if ($until) {
+                $qb->andWhere($expr->orX(
+                    $expr->andX(
+                        $expr->isNotNull('omeka_root.modified'),
+                        $expr->lte('omeka_root.modified', ':until_1')
+                    ),
+                    $expr->andX(
+                        $expr->isNull('omeka_root.modified'),
+                        $expr->lte('omeka_root.created', ':until_2')
+                    )
+                ));
+                $qb->setParameter('until_1', $until);
+                $qb->setParameter('until_2', $until);
+            }
+
+            $qb->groupBy('omeka_root.id');
+
+            // This limit call will form the basis of the flow control
+            $qb->setMaxResults($this->_listLimit);
+            $qb->setFirstResult($cursor);
+
+            $paginator = new Paginator($qb, false);
+            $rows = count($paginator);
+
+            if ($rows == 0) {
+                $this->throwError(self::OAI_ERR_NO_RECORDS_MATCH, new Message('No records match the given criteria.')); // @translate
+            } else {
+                if ($verb == 'ListIdentifiers') {
+                    $method = 'appendHeader';
+                } elseif ($verb == 'ListRecords') {
+                    $method = 'appendRecord';
+                }
+
+                $verbElement = $this->document->createElement($verb);
+                $this->document->documentElement->appendChild($verbElement);
+                foreach ($paginator as $itemEntity) {
+                    $item = $itemAdapter->getRepresentation($itemEntity);
+                    $metadataFormat->$method($verbElement, $item);
+                }
+                if ($rows > ($cursor + $this->_listLimit)) {
+                    $token = $this->createResumptionToken(
+                        $verb,
+                        $metadataPrefix,
+                        $cursor + $this->_listLimit,
+                        $set,
+                        $from,
+                        $until
+                    );
+
+                    $tokenElement = $this->document->createElement('resumptionToken', (string) $token->id());
+                    $tokenElement->setAttribute('expirationDate', $token->expiration()->format('Y-m-d\TH:i:s\Z'));
+                    $tokenElement->setAttribute('completeListSize', (string) $rows);
+                    $tokenElement->setAttribute('cursor', (string) $cursor);
+                    $verbElement->appendChild($tokenElement);
+                } elseif ($cursor != 0) {
+                    $tokenElement = $this->document->createElement('resumptionToken');
+                    $verbElement->appendChild($tokenElement);
+                }
             }
         }
     }
