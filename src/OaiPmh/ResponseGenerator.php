@@ -654,12 +654,15 @@ class ResponseGenerator extends AbstractXmlGenerator
         $header = $this->createElementWithChildren($parent, 'header', $headerData);
     }
 
-    private function listDesignerSets($verb, $metadataPrefix): void
+    private function listDesignerSets($verb, $metadataPrefix, $cursor, $set, $from, $until): void
     {
+        $api = $this->serviceLocator->get('ViewHelperManager')->get('api');
         $url = $this->serviceLocator->get('ViewHelperManager')->get('url');
-
-        $siteItemSets = $this->site->siteItemSets();
-        if (empty($siteItemSets)) {
+        $page = ($cursor / $this->_listLimit) + 1;
+        $thisSearch = $api->search('item_sets', ['site_id' => $this->site->id(), 'per_page' => $this->_listLimit, 'page' => $page, 'sort_by' => 'id']);
+        $itemSets = $thisSearch->getContent();
+        $totalResults = $thisSearch->getTotalResults();
+        if (empty($itemSets)) {
             $this->throwError(self::OAI_ERR_NO_SET_HIERARCHY);
             return;
         }
@@ -669,14 +672,31 @@ class ResponseGenerator extends AbstractXmlGenerator
         $metadataFormat->setOaiSet($this->oaiSet);
         $verbElement = $this->document->createElement($verb);
         $this->document->documentElement->appendChild($verbElement);
-        foreach ($siteItemSets as $siteItemSet) {
-            // $metadataFormat->$method($verbElement, $siteItemSet->itemSet());
-            $itemSet = $siteItemSet->itemSet();
+        foreach ($itemSets as $itemSet) {
             if ($verb == 'ListIdentifiers') {
                 $this->appendDesignerHeader($verbElement, $itemSet);
             } elseif ($verb == 'ListRecords') {
                 $this->appendDesignerRecord($verbElement, $itemSet, $url);
             }
+        }
+        if ($totalResults > ($cursor + $this->_listLimit)) {
+            $token = $this->createResumptionToken(
+                $verb,
+                $metadataPrefix,
+                $cursor + $this->_listLimit,
+                $set,
+                $from,
+                $until
+            );
+
+            $tokenElement = $this->document->createElement('resumptionToken', (string) $token->id());
+            $tokenElement->setAttribute('expirationDate', $token->expiration()->format('Y-m-d\TH:i:s\Z'));
+            $tokenElement->setAttribute('completeListSize', (string) $totalResults);
+            $tokenElement->setAttribute('cursor', (string) $cursor);
+            $verbElement->appendChild($tokenElement);
+        } elseif ($cursor != 0) {
+            $tokenElement = $this->document->createElement('resumptionToken');
+            $verbElement->appendChild($tokenElement);
         }
     }
 
@@ -761,7 +781,7 @@ class ResponseGenerator extends AbstractXmlGenerator
     private function listResponse($verb, $metadataPrefix, $cursor, $set, $from, $until): void
     {
         if ($this->site->slug() == 'designerfiles') {
-            $this->listDesignerSets($verb, $metadataPrefix);
+            $this->listDesignerSets($verb, $metadataPrefix, $cursor, $set, $from, $until);
         } else {
             /**
              * @var \Omeka\Api\Adapter\Manager $apiAdapterManager
