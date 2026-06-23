@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 /**
  * @author John Flatness, Yu-Hsun Lin
  * @copyright Copyright 2009 John Flatness, Yu-Hsun Lin
@@ -6,6 +8,7 @@
  * @copyright Daniel Berthereau, 2014-2018
  * @license http://www.gnu.org/licenses/gpl-3.0.txt
  */
+
 namespace OaiPmhRepository\OaiPmh\Metadata;
 
 use DOMElement;
@@ -61,61 +64,61 @@ class OaiDcterms extends AbstractMetadata
 
         // Each of the 55 Dublin Core terms, in the Omeka order.
         $oaiDCterms = [
-          'dc:title',
-          'dc:creator',
-          'dc:subject',
-          'dc:description',
-          'dc:publisher',
-          'dc:contributor',
-          'dc:date',
-          'dc:type',
-          'dc:format',
-          'dc:identifier',
-          'dc:source',
-          'dc:language',
-          'dc:relation',
-          'dc:coverage',
-          'dc:rights',
-          'dcterms:abstract',
-          'dcterms:accessRights',
-          'dcterms:accrualMethod',
-          'dcterms:accrualPeriodicity',
-          'dcterms:accrualPolicy',
-          'dcterms:alternative',
-          'dcterms:audience',
-          'dcterms:available',
-          'dcterms:bibliographicCitation',
-          'dcterms:conformsTo',
-          'dcterms:created',
-          'dcterms:dateAccepted',
-          'dcterms:dateCopyrighted',
-          'dcterms:dateSubmitted',
-          'dcterms:educationLevel',
-          'dcterms:extent',
-          'dcterms:hasFormat',
-          'dcterms:hasPart',
-          'dcterms:hasVersion',
-          'dcterms:instructionalMethod',
-          'dcterms:isFormatOf',
-          'dcterms:isPartOf',
-          'dcterms:isReferencedBy',
-          'dcterms:isReplacedBy',
-          'dcterms:isRequiredBy',
-          'dcterms:issued',
-          'dcterms:isVersionOf',
-          'dcterms:license',
-          'dcterms:mediator',
-          'dcterms:medium',
-          'dcterms:modified',
-          'dcterms:provenance',
-          'dcterms:references',
-          'dcterms:replaces',
-          'dcterms:requires',
-          'dcterms:rightsHolder',
-          'dcterms:spatial',
-          'dcterms:tableOfContents',
-          'dcterms:temporal',
-          'dcterms:valid'
+            'dc:title',
+            'dc:creator',
+            'dc:subject',
+            'dc:description',
+            'dc:publisher',
+            'dc:contributor',
+            'dc:date',
+            'dc:type',
+            'dc:format',
+            'dc:identifier',
+            'dc:source',
+            'dc:language',
+            'dc:relation',
+            'dc:coverage',
+            'dc:rights',
+            'dcterms:abstract',
+            'dcterms:accessRights',
+            'dcterms:accrualMethod',
+            'dcterms:accrualPeriodicity',
+            'dcterms:accrualPolicy',
+            'dcterms:alternative',
+            'dcterms:audience',
+            'dcterms:available',
+            'dcterms:bibliographicCitation',
+            'dcterms:conformsTo',
+            'dcterms:created',
+            'dcterms:dateAccepted',
+            'dcterms:dateCopyrighted',
+            'dcterms:dateSubmitted',
+            'dcterms:educationLevel',
+            'dcterms:extent',
+            'dcterms:hasFormat',
+            'dcterms:hasPart',
+            'dcterms:hasVersion',
+            'dcterms:instructionalMethod',
+            'dcterms:isFormatOf',
+            'dcterms:isPartOf',
+            'dcterms:isReferencedBy',
+            'dcterms:isReplacedBy',
+            'dcterms:isRequiredBy',
+            'dcterms:issued',
+            'dcterms:isVersionOf',
+            'dcterms:license',
+            'dcterms:mediator',
+            'dcterms:medium',
+            'dcterms:modified',
+            'dcterms:provenance',
+            'dcterms:references',
+            'dcterms:replaces',
+            'dcterms:requires',
+            'dcterms:rightsHolder',
+            'dcterms:spatial',
+            'dcterms:tableOfContents',
+            'dcterms:temporal',
+            'dcterms:valid'
         ];
 
 
@@ -133,51 +136,49 @@ class OaiDcterms extends AbstractMetadata
                 foreach ($termValues as $value) {
                     list($text, $attributes) = $this->formatValue($value);
                     if ($text == "Thesis") {
-                      $thesis = true;
-                      $this->appendNewElement($oai, $oaiDCterm, $text, $attributes);
+                        $thesis = true;
+                        $this->appendNewElement($oai, $oaiDCterm, $text, $attributes);
                     }
                 }
                 if (!$thesis) {
                     if ($item->displayResourceClassLabel()) {
-                      $this->appendNewElement($oai, $oaiDCterm, $item->displayResourceClassLabel());
+                        $this->appendNewElement($oai, $oaiDCterm, $item->displayResourceClassLabel());
                     } elseif ($termValues) {
-                      list($text, $attributes) = $this->formatValue($termValues[0]);
-                      $this->appendNewElement($oai, $oaiDCterm, $text, $attributes);
+                        list($text, $attributes) = $this->formatValue($termValues[0]);
+                        $this->appendNewElement($oai, $oaiDCterm, $text, $attributes);
                     }
                 }
             } else {
-              foreach ($termValues as $value) {
-                  list($text, $attributes) = $this->formatValue($value);
-                  //get relator terms
-                  if ($value->property()->term() == "dcterms:contributor") {
-                      if ($valueAnnotation = $value->valueAnnotation()) {
-                          foreach ($valueAnnotation->values() as $annotationTerm => $propertyData) {
-                              if ($propertyData['property']->term() == "bf:role") {
-                                  $relatorList = [];
-                                  $relatorString = '';
-                                  foreach ($propertyData['values'] as $annotationValue) {
-                                      array_push($relatorList, $annotationValue);
-                                  }
-                                  if ($relatorList) {
-                                      $relatorString = ' [' . implode(", ", $relatorList) . ']';
-                                      $text = $text . $relatorString;
-                                  }
-                              }
-                          }
-                      }
-                  }
-                  //append
-                  $this->appendNewElement($oai, $oaiDCterm, $text, $attributes);
-              }
+                foreach ($termValues as $value) {
+                    list($text, $attributes) = $this->formatValue($value);
+                    //get relator terms
+                    if ($value->property()->term() == "dcterms:contributor") {
+                        if ($valueAnnotation = $value->valueAnnotation()) {
+                            foreach ($valueAnnotation->values() as $annotationTerm => $propertyData) {
+                                if ($propertyData['property']->term() == "bf:role") {
+                                    $relatorList = [];
+                                    $relatorString = '';
+                                    foreach ($propertyData['values'] as $annotationValue) {
+                                        array_push($relatorList, $annotationValue);
+                                    }
+                                    if ($relatorList) {
+                                        $relatorString = ' [' . implode(", ", $relatorList) . ']';
+                                        $text = $text . $relatorString;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    //append
+                    $this->appendNewElement($oai, $oaiDCterm, $text, $attributes);
+                }
             }
-
-
         }
         // Add item sets
         if ($itemSets = $item->itemSets()) {
-          foreach ($itemSets as $itemSet) {
-            $this->appendNewElement($oai, "dcterms:isPartOf", $itemSet->displayTitle());
-          }
+            foreach ($itemSets as $itemSet) {
+                $this->appendNewElement($oai, "dcterms:isPartOf", $itemSet->displayTitle());
+            }
         }
 
         $appendIdentifier = $this->singleIdentifier($item);
@@ -190,13 +191,20 @@ class OaiDcterms extends AbstractMetadata
         $thumbnailURL = '';
         if (($primaryMedia) && ($primaryMedia->ingester() == 'remoteFile')) {
             $thumbnailURL = $primaryMedia->mediaData()['thumbnail'];
+        } elseif (($primaryMedia) && ($primaryMedia->ingester() == 'remoteCompoundObject')) {
+            foreach ($primaryMedia->mediaData()['components'] as  $component) {
+                if ($component['thumbnail']) {
+                    $thumbnailURL = $component['thumbnail'];
+                    break;
+                }
+            }
         }
         if (($thumbnailURL == '') && ($primaryMedia) && ($primaryMedia->hasThumbnails())) {
             $thumbnailURL = $primaryMedia->thumbnailUrl('medium');
         }
         $thumbnailURL = $thumbnail ? $thumbnail->assetUrl() : $thumbnailURL;
         if ($thumbnailURL) {
-            $this->appendNewElement($oai, 'dc:identifier', str_replace("amazon","Amazon",$thumbnailURL));
+            $this->appendNewElement($oai, 'dc:identifier', str_replace("amazon", "Amazon", $thumbnailURL));
         }
 
         // Also append an identifier for each file
