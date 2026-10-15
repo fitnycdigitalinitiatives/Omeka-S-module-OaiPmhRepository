@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 /**
  * @author John Flatness, Yu-Hsun Lin
  * @copyright Copyright 2009 John Flatness, Yu-Hsun Lin
@@ -6,6 +8,7 @@
  * @copyright Daniel Berthereau, 2014-2018
  * @license http://www.gnu.org/licenses/gpl-3.0.txt
  */
+
 namespace OaiPmhRepository\OaiPmh\Metadata;
 
 use ArrayObject;
@@ -96,9 +99,7 @@ abstract class AbstractMetadata extends AbstractXmlGenerator implements Metadata
      *
      * @param ArrayObject $query
      */
-    public function filterList(ArrayObject $query): void
-    {
-    }
+    public function filterList(ArrayObject $query): void {}
 
     public function appendRecord(DOMElement $parent, ItemRepresentation $item): void
     {
@@ -152,14 +153,25 @@ abstract class AbstractMetadata extends AbstractXmlGenerator implements Metadata
                     break;
             }
         } else {
+            // Prioritize SPARC Digital over other sites so Oral histories don't link to AOD
+            $siteSlug = null;
+            if ($resource instanceof ItemRepresentation) {
+                $sites = $resource->sites();
+                foreach ($sites as $key => $site) {
+                    if ($site->slug() == 'sparcdigital') {
+                        $siteSlug = 'sparcdigital';
+                        break;
+                    }
+                }
+            }
             switch ($this->params['append_identifier_site']) {
                 default:
                 case 'api_url':
                     return $resource->apiUrl();
                 case 'relative_site_url':
-                    return $resource->siteUrl();
+                    return $resource->siteUrl($siteSlug);
                 case 'absolute_site_url':
-                    return $resource->siteUrl(null, true);
+                    return $resource->siteUrl($siteSlug, true);
             }
         }
     }
@@ -185,7 +197,7 @@ abstract class AbstractMetadata extends AbstractXmlGenerator implements Metadata
             case substr($type, 0, 13) === 'valuesuggest:':
             case substr($type, 0, 16) === 'valuesuggestall:':
                 return $this->formatValueUri($value);
-            // Module Custom vocab.
+                // Module Custom vocab.
             case substr($type, 0, 12) === 'customvocab:':
                 $vvr = $value->valueResource();
                 if ($vvr) {
@@ -199,7 +211,7 @@ abstract class AbstractMetadata extends AbstractXmlGenerator implements Metadata
                 break;
             // Module DataTypeRdf.
             case 'xml':
-            // Module RdfDatatype (deprecated).
+                // Module RdfDatatype (deprecated).
             case 'rdf:XMLLiteral':
             case 'xsd:date':
             case 'xsd:dateTime':
@@ -263,15 +275,14 @@ abstract class AbstractMetadata extends AbstractXmlGenerator implements Metadata
                 $vUri = (string) $value->uri();
                 $v = (string) $value->value();
                 if (filter_var($vUri, FILTER_VALIDATE_URL)) {
-                  $v = strlen($v) ? $v : $vUri;
-                  $attributes['href'] = $vUri;
+                    $v = strlen($v) ? $v : $vUri;
+                    $attributes['href'] = $vUri;
                 } else {
-                  if (!$v) {
-                    $v = $vUri;
-                  } else {
-                    $v = $v . ': ' . $vUri;
-                  }
-
+                    if (!$v) {
+                        $v = $vUri;
+                    } else {
+                        $v = $v . ': ' . $vUri;
+                    }
                 }
                 break;
             case 'uri_attr_label':
